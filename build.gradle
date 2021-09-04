@@ -1,0 +1,19 @@
+plugins {
+    id 'java'
+}
+
+group 'nl.dannyjelsma'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.lambdaworks:scrypt:1.4.0'
+    implementation 'de.mkammerer:argon2-jvm:2.10.1'
+}
+
+test {
+
+}
