@@ -1,21 +1,32 @@
 package nl.dannyjelsma.cloudencrypt.backup;
 
+import de.mkammerer.argon2.Argon2Advanced;
+import de.mkammerer.argon2.Argon2Factory;
 import nl.dannyjelsma.cloudencrypt.decryption.AESDecryptor;
+import nl.dannyjelsma.cloudencrypt.decryption.RSADecryptor;
 import nl.dannyjelsma.cloudencrypt.download.Downloader;
 import nl.dannyjelsma.cloudencrypt.encryption.AESEncryptor;
 import nl.dannyjelsma.cloudencrypt.encryption.RSAEncryptor;
 import nl.dannyjelsma.cloudencrypt.exceptions.BackupNotInitializedException;
 import nl.dannyjelsma.cloudencrypt.upload.Uploader;
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.io.FileUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.security.*;
 import java.security.spec.EncodedKeySpec;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collection;
+import java.util.List;
+import java.util.regex.Pattern;
 
 public class BackupManager {
 
@@ -100,11 +111,22 @@ public class BackupManager {
     }
 
     public void uploadBackup(Uploader uploader) {
-        File[] files = backupFolder.getFolder().listFiles();
+        Collection<File> files = FileUtils.listFiles(backupFolder.getFolder(), null, true);
         AESEncryptor aesEncryptor = new AESEncryptor();
         RSAEncryptor rsaEncryptor = new RSAEncryptor();
+        Argon2Advanced argon2;
+        byte[] iv = new byte[0];
+        byte[] salt;
+        byte[] key = new byte[0];
 
         if (files == null) return;
+
+        if (encryptFileNames) {
+            argon2 = Argon2Factory.createAdvanced(Argon2Factory.Argon2Types.ARGON2id);
+            iv = Arrays.copyOfRange(privateKey.getEncoded(), 0, 16);
+            salt = Arrays.copyOfRange(privateKey.getEncoded(), 16, 32);
+            key = argon2.pbkdf(3, 500000, 4, password.getBytes(), salt, 32);
+        }
 
         for (File file : files) {
             if (file.getName().equals("ce_priv.key") || file.getName().equals("ce_pub.key")) continue;
@@ -122,15 +144,28 @@ public class BackupManager {
                 os.writeBytes(encryptedBytes);
                 os.writeBytes("$CEPS$".getBytes());
                 os.write(encryptedPassword);
-
                 byte[] fileBytes = os.toByteArray();
+                String fileName = file.getAbsolutePath()
+                        .replace(file.getName(), "")
+                        .replace(backupFolder.getFolder().getAbsolutePath(), "") + file.getName();
+
+                if (encryptFileNames) {
+                    byte[] encryptedFileNameBytes = aesEncryptor.encryptBytes(file.getName().getBytes(), key, iv);
+                    String encryptedFileName = Hex.encodeHexString(encryptedFileNameBytes) + ".cen";
+
+                    if (encryptedFileName.length() >= 255) {
+                        System.out.println("Encrypted file name too long! Using original name...");
+                        encryptedFileName = file.getName();
+                    }
+
+                    fileName = file.getAbsolutePath()
+                            .replace(file.getName(), "")
+                            .replace(backupFolder.getFolder().getAbsolutePath(), "") + encryptedFileName;
+                }
+
                 long end = System.currentTimeMillis() - start;
                 System.out.println("Encryption took " + end + "ms");
-
-                start = System.currentTimeMillis();
-                uploader.uploadFile(fileBytes, file.getName());
-                end = System.currentTimeMillis() - start;
-                System.out.println("Uploading took " + end + "ms");
+                uploader.uploadFile(fileBytes, fileName);
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
@@ -138,6 +173,49 @@ public class BackupManager {
     }
 
     public void downloadBackup(Downloader downloader) {
+        List<File> downloadedFiles = downloader.downloadFiles(backupFolder);
+        AESDecryptor aesDecryptor = new AESDecryptor();
+        RSADecryptor rsaDecryptor = new RSADecryptor();
+        Argon2Advanced argon2;
+        byte[] iv = new byte[0];
+        byte[] salt;
+        byte[] key = new byte[0];
 
+        if (encryptFileNames) {
+            argon2 = Argon2Factory.createAdvanced(Argon2Factory.Argon2Types.ARGON2id);
+            iv = Arrays.copyOfRange(privateKey.getEncoded(), 0, 16);
+            salt = Arrays.copyOfRange(privateKey.getEncoded(), 16, 32);
+            key = argon2.pbkdf(3, 500000, 4, password.getBytes(), salt, 32);
+        }
+
+        for (File file : downloadedFiles) {
+            long start = System.currentTimeMillis();
+
+            try {
+                System.out.println("Decrypting " + file.getName() + "...");
+                String fileContents = new String(Files.readAllBytes(file.toPath()));
+                String filePassword = fileContents.split(Pattern.quote("$CEPS$"))[1];
+                byte[] decryptedPassword = rsaDecryptor.decryptBytes(Base64.getDecoder().decode(filePassword), privateKey);
+                byte[] decryptedContents = aesDecryptor.decryptFileContents(file, decryptedPassword);
+
+                long end = System.currentTimeMillis() - start;
+                System.out.println("Decryption took " + end + "ms");
+                Files.write(file.toPath(), decryptedContents);
+
+                if (encryptFileNames) {
+                    byte[] decryptedFileNameBytes = aesDecryptor.decryptBytes(Hex.decodeHex(file.getName().replace(".cen", "")), key, iv);
+                    String decryptedFileName = new String(decryptedFileNameBytes);
+
+                    if (decryptedFileName.length() >= 255) {
+                        System.out.println("Encrypted file name too long! Using original name...");
+                        decryptedFileName = file.getName();
+                    }
+
+                    Files.move(file.toPath(), new File(backupFolder.getFolder(), decryptedFileName).toPath());
+                }
+            } catch (IOException | DecoderException e) {
+                e.printStackTrace();
+            }
+        }
     }
 }

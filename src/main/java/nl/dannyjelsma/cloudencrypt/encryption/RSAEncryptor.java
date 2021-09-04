@@ -16,7 +16,7 @@ public class RSAEncryptor {
 
     public byte[] encryptBytes(byte[] input, PublicKey key) {
         try {
-            Cipher cipher = Cipher.getInstance("RSA");
+            Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
             cipher.init(Cipher.ENCRYPT_MODE, key);
 
             return cipher.doFinal(input);

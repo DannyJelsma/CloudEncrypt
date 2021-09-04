@@ -16,6 +16,10 @@ public class LocalTestUploader implements Uploader {
         File file = new File(location, fileName);
 
         try {
+            if (!file.getParentFile().exists()) {
+                file.getParentFile().mkdirs();
+            }
+
             Files.write(file.toPath(), fileBytes);
         } catch (IOException e) {
             e.printStackTrace();

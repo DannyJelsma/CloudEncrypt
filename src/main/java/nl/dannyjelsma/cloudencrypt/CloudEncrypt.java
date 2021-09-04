@@ -2,6 +2,7 @@ package nl.dannyjelsma.cloudencrypt;
 
 import nl.dannyjelsma.cloudencrypt.backup.BackupFolder;
 import nl.dannyjelsma.cloudencrypt.backup.BackupManager;
+import nl.dannyjelsma.cloudencrypt.download.LocalTestDownloader;
 import nl.dannyjelsma.cloudencrypt.upload.LocalTestUploader;
 
 import java.io.File;
@@ -49,8 +50,9 @@ public class CloudEncrypt {
 
     public static void main(String[] args) {
         BackupFolder folder = new BackupFolder(new File("C:\\Users\\Danny\\Desktop\\backup-folder-test"));
-        BackupManager backupEncryptor = new BackupManager(folder, "#*^JTKLW4JbFq*L%o%S2%Q4Ra", true);
+        BackupManager backupManager = new BackupManager(folder, "#*^JTKLW4JbFq*L%o%S2%Q4Ra", false);
 
-        backupEncryptor.uploadBackup(new LocalTestUploader());
+        backupManager.uploadBackup(new LocalTestUploader());
+        //backupManager.downloadBackup(new LocalTestDownloader());
     }
 }

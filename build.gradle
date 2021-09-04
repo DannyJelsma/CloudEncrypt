@@ -12,6 +12,8 @@ repositories {
 dependencies {
     implementation 'com.lambdaworks:scrypt:1.4.0'
     implementation 'de.mkammerer:argon2-jvm:2.10.1'
+    implementation 'commons-codec:commons-codec:1.15'
+    implementation 'commons-io:commons-io:2.11.0'
 }
 
 test {

@@ -23,7 +23,22 @@ public class AESDecryptor {
         try {
             Argon2Advanced argon2 = Argon2Factory.createAdvanced(Argon2Factory.Argon2Types.ARGON2id);
             IvParameterSpec ivSpec = new IvParameterSpec(iv);
-            byte[] key = argon2.pbkdf(4, 500000, 4, password, salt, 32);
+            byte[] key = argon2.pbkdf(5, 1<<15, 4, password, salt, 32);
+            SecretKeySpec secretKey = new SecretKeySpec(key, "AES");
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5PADDING");
+
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec);
+            return cipher.doFinal(input);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+        return null;
+    }
+
+    public byte[] decryptBytes(byte[] input, byte[] key, byte[] iv) {
+        try {
+            IvParameterSpec ivSpec = new IvParameterSpec(iv);
             SecretKeySpec secretKey = new SecretKeySpec(key, "AES");
             Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5PADDING");
 
@@ -40,7 +55,13 @@ public class AESDecryptor {
         try (FileInputStream fis = new FileInputStream(file)) {
             String encrypted = new String(Files.readAllBytes(file.toPath()));
             String[] encryptionInfo = encrypted.split(Pattern.quote("$CEST$"))[1].split(Pattern.quote("$CEIV$"));
-            int encryptionInfoSize = encrypted.split(Pattern.quote("$CEST$"))[1].getBytes().length + "$CEST$".getBytes().length;
+            int encryptionInfoSize;
+
+            if (encrypted.contains("$CEPS$")) {
+                encryptionInfo[1] = encryptionInfo[1].split(Pattern.quote("$CEPS$"))[0];
+            }
+
+            encryptionInfoSize = encrypted.split(Pattern.quote("$CEST$"))[1].getBytes().length + "$CEST$".getBytes().length;
             byte[] decoded = fis.readNBytes(((int) file.length()) - encryptionInfoSize);
             byte[] salt = Base64.getDecoder().decode(encryptionInfo[0]);
             byte[] iv = Base64.getDecoder().decode(encryptionInfo[1]);

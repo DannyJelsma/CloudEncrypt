@@ -41,7 +41,22 @@ public class AESEncryptor {
         try {
             Argon2Advanced argon2 = Argon2Factory.createAdvanced(Argon2Factory.Argon2Types.ARGON2id);
             IvParameterSpec ivSpec = new IvParameterSpec(iv);
-            byte[] key = argon2.pbkdf(4, 500000, 4, password, salt, 32);
+            byte[] key = argon2.pbkdf(5, 1<<15, 4, password, salt, 32);
+            SecretKeySpec secretKey = new SecretKeySpec(key, "AES");
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivSpec, random);
+            return cipher.doFinal(input);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+        return null;
+    }
+
+    public byte[] encryptBytes(byte[] input, byte[] key, byte[] iv) {
+        try {
+            IvParameterSpec ivSpec = new IvParameterSpec(iv);
             SecretKeySpec secretKey = new SecretKeySpec(key, "AES");
             Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
 
