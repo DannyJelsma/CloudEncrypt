@@ -1,58 +1,41 @@
 package nl.dannyjelsma.cloudencrypt;
 
+import com.goterl.lazysodium.LazySodiumJava;
+import com.goterl.lazysodium.SodiumJava;
 import nl.dannyjelsma.cloudencrypt.backup.BackupFolder;
 import nl.dannyjelsma.cloudencrypt.backup.BackupManager;
+import nl.dannyjelsma.cloudencrypt.download.DropboxDownloader;
 import nl.dannyjelsma.cloudencrypt.download.LocalTestDownloader;
+import nl.dannyjelsma.cloudencrypt.encryption.EncryptionAlgorithm;
+import nl.dannyjelsma.cloudencrypt.upload.DropboxUploader;
 import nl.dannyjelsma.cloudencrypt.upload.LocalTestUploader;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 
 public class CloudEncrypt {
 
-    /*public static void main(String[] args) {
-        AESEncryptor encryptor = new AESEncryptor();
-        AESDecryptor decryptor = new AESDecryptor();
-        byte[] password = new byte[128];
-
-        try {
-            SecureRandom.getInstanceStrong().nextBytes(password);
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
-
-        System.out.println("Using the following password: " + new String(password));
-        System.out.println("Encryping test file...");
-        long start = System.currentTimeMillis();
-        byte[] encryptedFile = encryptor.encryptFileContents(new File("C:\\Users\\Danny\\Desktop\\coins.json"),
-                new String(password));
-        try {
-            Files.write(Path.of("C:\\Users\\Danny\\Desktop\\coins-test1.json"), encryptedFile, StandardOpenOption.CREATE);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        long end = System.currentTimeMillis() - start;
-        System.out.println("Took " + end + "ms");
-
-        System.out.println("Decrypting test file...");
-        start = System.currentTimeMillis();
-        byte[] decryptedFile = decryptor.decryptFileContents(new File("C:\\Users\\Danny\\Desktop\\coins-test1.json"),
-                new String(password));
-        try {
-            Files.write(Path.of("C:\\Users\\Danny\\Desktop\\coins-test2.json"), decryptedFile, StandardOpenOption.CREATE);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        end = System.currentTimeMillis() - start;
-        System.out.println("Took " + end + "ms");
-    }*/
+    private static LazySodiumJava sodium;
 
     public static void main(String[] args) {
-        BackupFolder folder = new BackupFolder(new File("C:\\Users\\Danny\\Desktop\\backup-folder-test"));
-        BackupManager backupManager = new BackupManager(folder, "#*^JTKLW4JbFq*L%o%S2%Q4Ra", false);
+        try {
+            sodium = new LazySodiumJava(new SodiumJava(), StandardCharsets.UTF_8);
+            sodium.sodiumInit();
 
-        backupManager.uploadBackup(new LocalTestUploader());
-        //backupManager.downloadBackup(new LocalTestDownloader());
+            BackupFolder folder = new BackupFolder(new File("D:\\backup"), "#*^JTKLW4JbFq*L%o%S2%Q4Ra", EncryptionAlgorithm.AES_GCM);
+            BackupManager backupManager = new BackupManager(folder, true, true);
+
+            //backupManager.uploadBackup(new LocalTestUploader());
+            //backupManager.downloadBackup(new LocalTestDownloader());
+
+            //backupManager.uploadBackup(new DropboxUploader());
+            //backupManager.downloadBackup(new DropboxDownloader());
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    public static LazySodiumJava getSodium() {
+        return sodium;
     }
 }

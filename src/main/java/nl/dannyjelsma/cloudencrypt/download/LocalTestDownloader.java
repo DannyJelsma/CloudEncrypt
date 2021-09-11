@@ -18,8 +18,8 @@ public class LocalTestDownloader implements Downloader {
     }
 
     @Override
-    public List<File> downloadFiles(BackupFolder folder) {
-        File encryptedDir = new File("C:\\Users\\Danny\\Desktop\\backup-loc");
+    public List<File> downloadFiles(BackupFolder folder, long backupTime) {
+        File encryptedDir = new File("D:\\backup-enc");
         Collection<File> files = FileUtils.listFiles(encryptedDir, null, true);
         List<File> downloadedFiles = new ArrayList<>();
 
@@ -34,7 +34,10 @@ public class LocalTestDownloader implements Downloader {
             }
 
             try {
-                Files.copy(file.toPath(), destFile.toPath());
+                if (!destFile.exists()) {
+                    Files.copy(file.toPath(), destFile.toPath());
+                }
+
                 downloadedFiles.add(destFile);
             } catch (IOException e) {
                 e.printStackTrace();

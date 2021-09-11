@@ -1,52 +1,44 @@
 package nl.dannyjelsma.cloudencrypt.backup;
 
-import de.mkammerer.argon2.Argon2Advanced;
-import de.mkammerer.argon2.Argon2Factory;
-import nl.dannyjelsma.cloudencrypt.decryption.AESDecryptor;
-import nl.dannyjelsma.cloudencrypt.decryption.RSADecryptor;
+import com.goterl.lazysodium.LazySodiumJava;
+import com.goterl.lazysodium.interfaces.Box;
+import com.goterl.lazysodium.interfaces.SecretStream;
+import nl.dannyjelsma.cloudencrypt.CloudEncrypt;
+import nl.dannyjelsma.cloudencrypt.decryption.asymmetric.ECCDecryptor;
+import nl.dannyjelsma.cloudencrypt.decryption.symmetric.AESDecryptor;
+import nl.dannyjelsma.cloudencrypt.decryption.symmetric.ChaChaDecryptor;
+import nl.dannyjelsma.cloudencrypt.decryption.symmetric.SymmetricDecryptor;
 import nl.dannyjelsma.cloudencrypt.download.Downloader;
-import nl.dannyjelsma.cloudencrypt.encryption.AESEncryptor;
-import nl.dannyjelsma.cloudencrypt.encryption.RSAEncryptor;
+import nl.dannyjelsma.cloudencrypt.encryption.EncryptionAlgorithm;
+import nl.dannyjelsma.cloudencrypt.encryption.asymmetric.ECCEncryptor;
+import nl.dannyjelsma.cloudencrypt.encryption.symmetric.AESEncryptor;
+import nl.dannyjelsma.cloudencrypt.encryption.symmetric.ChaChaEncryptor;
+import nl.dannyjelsma.cloudencrypt.encryption.symmetric.SymmetricEncryptor;
 import nl.dannyjelsma.cloudencrypt.exceptions.BackupNotInitializedException;
 import nl.dannyjelsma.cloudencrypt.upload.Uploader;
-import org.apache.commons.codec.DecoderException;
-import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.FileUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.IOException;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
-import java.security.*;
-import java.security.spec.EncodedKeySpec;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.Collection;
-import java.util.List;
-import java.util.regex.Pattern;
+import java.util.*;
 
 public class BackupManager {
 
     private final BackupFolder backupFolder;
-    private final String password;
-    private PublicKey publicKey;
-    private PrivateKey privateKey;
-    private SecureRandom random;
-    private boolean encryptFileNames;
+    private byte[] publicKey;
+    private byte[] privateKey;
+    private final boolean encryptFileNames;
+    private final boolean encryptDirectoryNames;
 
-    public BackupManager(BackupFolder folder, String password, boolean encryptFileNames) {
+    // TODO: encryptFileNames and encryptDirectoryNames to BackupFolder?
+    public BackupManager(BackupFolder folder, boolean encryptFileNames, boolean encryptDirectoryNames) {
         this.backupFolder = folder;
-        this.password = password;
         this.encryptFileNames = encryptFileNames;
-
-        try {
-            this.random = SecureRandom.getInstanceStrong();
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
+        this.encryptDirectoryNames = encryptDirectoryNames;
 
         if (backupFolder.requiresFirstTimeInit()) {
             if (!doFirstTimeInit()) {
@@ -63,20 +55,25 @@ public class BackupManager {
 
     public boolean doFirstTimeInit() {
         try {
-            AESEncryptor encryptor = new AESEncryptor();
-            KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-            generator.initialize(4096, random);
-            KeyPair pair = generator.generateKeyPair();
-            PrivateKey privateKey = pair.getPrivate();
-            PublicKey publicKey = pair.getPublic();
+            LazySodiumJava sodium = CloudEncrypt.getSodium();
+            Box.Native cryptoBox = CloudEncrypt.getSodium();
+            SymmetricEncryptor encryptor = backupFolder.getSymmetricEncryptor();
+            byte[] publicKey = new byte[Box.PUBLICKEYBYTES];
+            byte[] privateKey = new byte[Box.SECRETKEYBYTES];
+            byte[] salt = sodium.randomBytesBuf(16);
+            cryptoBox.cryptoBoxKeypair(publicKey, privateKey);
+
+            byte[] encryptedPrivateKey = encryptor.encryptBytes(privateKey, sodium.bytes(backupFolder.getPassword()), salt);
+            ByteArrayOutputStream bos = new ByteArrayOutputStream(encryptedPrivateKey.length + salt.length);
+            bos.write(salt);
+            bos.write(encryptedPrivateKey);
+            byte[] finalPrivateKey = bos.toByteArray();
+            bos.close();
 
             File privateKeyFile = new File(backupFolder.getFolder(), "ce_priv.key");
             File publicKeyFile = new File(backupFolder.getFolder(), "ce_pub.key");
-            Files.write(privateKeyFile.toPath(), privateKey.getEncoded(), StandardOpenOption.CREATE);
-            Files.write(publicKeyFile.toPath(), publicKey.getEncoded(), StandardOpenOption.CREATE);
-
-            byte[] encryptedPrivKey = encryptor.encryptFileContents(privateKeyFile, password.getBytes());
-            Files.write(privateKeyFile.toPath(), encryptedPrivKey, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.write(privateKeyFile.toPath(), finalPrivateKey, StandardOpenOption.CREATE);
+            Files.write(publicKeyFile.toPath(), publicKey, StandardOpenOption.CREATE);
 
             return true;
         } catch (Exception ex) {
@@ -90,19 +87,19 @@ public class BackupManager {
             throw new BackupNotInitializedException();
         }
 
+        LazySodiumJava sodium = CloudEncrypt.getSodium();
         File publicKeyFile = backupFolder.getPublicKey();
         File privateKeyFile = backupFolder.getPrivateKey();
-        AESDecryptor decryptor = new AESDecryptor();
+        SymmetricDecryptor decryptor = backupFolder.getSymmetricDecryptor();
 
         try {
-            byte[] decryptedPubKey = Files.readAllBytes(publicKeyFile.toPath());
-            byte[] decryptedPrivKey = decryptor.decryptFileContents(privateKeyFile, password.getBytes());
-            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-            EncodedKeySpec publicKeySpec = new X509EncodedKeySpec(decryptedPubKey);
-            EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(decryptedPrivKey);
+            FileInputStream fis = new FileInputStream(privateKeyFile);
+            byte[] salt = fis.readNBytes(16);
+            byte[] privateKeyBytes = fis.readAllBytes();
 
-            publicKey = keyFactory.generatePublic(publicKeySpec);
-            privateKey = keyFactory.generatePrivate(privateKeySpec);
+            fis.close();
+            this.publicKey = Files.readAllBytes(publicKeyFile.toPath());
+            this.privateKey = decryptor.decryptBytes(privateKeyBytes, sodium.bytes(backupFolder.getPassword()), salt);
             return true;
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -111,61 +108,96 @@ public class BackupManager {
     }
 
     public void uploadBackup(Uploader uploader) {
+        LazySodiumJava sodium = CloudEncrypt.getSodium();
         Collection<File> files = FileUtils.listFiles(backupFolder.getFolder(), null, true);
-        AESEncryptor aesEncryptor = new AESEncryptor();
-        RSAEncryptor rsaEncryptor = new RSAEncryptor();
-        Argon2Advanced argon2;
-        byte[] iv = new byte[0];
-        byte[] salt;
-        byte[] key = new byte[0];
+        HashMap<String, String> directoryNameCache = new HashMap<>();
+        SymmetricEncryptor encryptor = backupFolder.getSymmetricEncryptor();
+        ECCEncryptor eccEncryptor = new ECCEncryptor();
 
         if (files == null) return;
 
-        if (encryptFileNames) {
-            argon2 = Argon2Factory.createAdvanced(Argon2Factory.Argon2Types.ARGON2id);
-            iv = Arrays.copyOfRange(privateKey.getEncoded(), 0, 16);
-            salt = Arrays.copyOfRange(privateKey.getEncoded(), 16, 32);
-            key = argon2.pbkdf(3, 500000, 4, password.getBytes(), salt, 32);
-        }
-
         for (File file : files) {
-            if (file.getName().equals("ce_priv.key") || file.getName().equals("ce_pub.key")) continue;
+            if (file.getName().equals("ce_priv.key") || file.getName().equals("ce_pub.key")
+                    || file.getName().endsWith(".ce") || file.getName().equals("oauth.json")
+                    || file.getName().endsWith(".cename")) continue;
+
+            if (file.length() <= 0) continue;
 
             System.out.println("Encrypting " + file.getName() + "...");
             long start = System.currentTimeMillis();
             try {
-                byte[] password = new byte[128];
-                random.nextBytes(password);
+                SecretStream.Native secretStream = CloudEncrypt.getSodium();
+                byte[] password = new byte[SecretStream.KEYBYTES];
+                secretStream.cryptoSecretStreamKeygen(password);
+                byte[] encryptedPassword = eccEncryptor.encryptBytes(password, publicKey);
+                File preEncryptionFile = new File(file.getParentFile(), file.getName() + ".ce");
 
-                byte[] encryptedBytes = aesEncryptor.encryptFileContents(file, password);
-                byte[] encryptedPassword = Base64.getEncoder().encode(rsaEncryptor.encryptBytes(password, publicKey));
+                try (FileOutputStream fos = new FileOutputStream(preEncryptionFile)) {
+                    fos.write(encryptedPassword);
+                }
 
-                ByteArrayOutputStream os = new ByteArrayOutputStream();
-                os.writeBytes(encryptedBytes);
-                os.writeBytes("$CEPS$".getBytes());
-                os.write(encryptedPassword);
-                byte[] fileBytes = os.toByteArray();
-                String fileName = file.getAbsolutePath()
-                        .replace(file.getName(), "")
+                File encryptedFile = encryptor.encryptFile(file, password);
+                String dstPath = file.getAbsolutePath().replace(file.getName(), "")
                         .replace(backupFolder.getFolder().getAbsolutePath(), "") + file.getName();
+                dstPath = dstPath.replace("\\", "/");
 
-                if (encryptFileNames) {
-                    byte[] encryptedFileNameBytes = aesEncryptor.encryptBytes(file.getName().getBytes(), key, iv);
-                    String encryptedFileName = Hex.encodeHexString(encryptedFileNameBytes) + ".cen";
+                if (encryptDirectoryNames) {
+                    String[] split = dstPath.split("/");
+                    List<File> nameFiles = new ArrayList<>();
 
-                    if (encryptedFileName.length() >= 255) {
-                        System.out.println("Encrypted file name too long! Using original name...");
-                        encryptedFileName = file.getName();
+                    for (int i = 1; i < split.length - 1; i++) {
+                        String directoryName = split[i];
+                        if (!directoryNameCache.containsKey(directoryName)) {
+                            byte[] encryptedDirectoryNameBytes = eccEncryptor.encryptBytes(sodium.bytes(directoryName), publicKey);
+                            String encryptedDirectoryName = Base64.getEncoder().encodeToString(encryptedDirectoryNameBytes);
+
+                            if (encryptedDirectoryName.length() >= 200) {
+                                System.out.println("Encrypted directory name too long! Using randomized name...");
+                                String uuid = UUID.randomUUID().toString();
+                                File nameFile = new File(encryptedFile.getParentFile(), uuid + ".cename");
+                                Files.writeString(nameFile.toPath(), encryptedDirectoryName);
+                                nameFiles.add(nameFile);
+                                encryptedDirectoryName = uuid;
+                            }
+
+                            directoryNameCache.put(directoryName, encryptedDirectoryName.replace("/", "_"));
+                            split[i] = encryptedDirectoryName.replace("/", "_");
+                        } else {
+                            split[i] = directoryNameCache.get(directoryName);
+                        }
                     }
 
-                    fileName = file.getAbsolutePath()
-                            .replace(file.getName(), "")
-                            .replace(backupFolder.getFolder().getAbsolutePath(), "") + encryptedFileName;
+                    dstPath = String.join("/", split);
+
+                    for (File nameFile : nameFiles) {
+                        uploader.uploadFile(backupFolder, file, nameFile, dstPath.replace(file.getName(), nameFile.getName()));
+                        nameFile.delete();
+                    }
+                }
+
+                if (encryptFileNames) {
+                    byte[] encryptedFileNameBytes = eccEncryptor.encryptBytes(sodium.bytes(file.getName()), publicKey);
+                    String encryptedFileName = Base64.getEncoder().encodeToString(encryptedFileNameBytes);
+
+                    if (encryptedFileName.length() >= 200) {
+                        System.out.println("Encrypted file name too long! Using randomized name...");
+                        String uuid = UUID.randomUUID().toString();
+                        File nameFile = new File(encryptedFile.getParentFile(), uuid + ".cename");
+                        Files.writeString(nameFile.toPath(), encryptedFileName);
+                        uploader.uploadFile(backupFolder, file, nameFile, dstPath.replace(file.getName(), nameFile.getName()));
+                        nameFile.delete();
+                        encryptedFileName = uuid;
+                    }
+
+                    dstPath = dstPath.replace(file.getName(), encryptedFileName.replace("/", "_"));
                 }
 
                 long end = System.currentTimeMillis() - start;
                 System.out.println("Encryption took " + end + "ms");
-                uploader.uploadFile(fileBytes, fileName);
+                start = System.currentTimeMillis();
+                uploader.uploadFile(backupFolder, file, encryptedFile, dstPath);
+                end = System.currentTimeMillis() - start;
+                System.out.println("Uploading took " + end + "ms");
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
@@ -173,49 +205,104 @@ public class BackupManager {
     }
 
     public void downloadBackup(Downloader downloader) {
-        List<File> downloadedFiles = downloader.downloadFiles(backupFolder);
-        AESDecryptor aesDecryptor = new AESDecryptor();
-        RSADecryptor rsaDecryptor = new RSADecryptor();
-        Argon2Advanced argon2;
-        byte[] iv = new byte[0];
-        byte[] salt;
-        byte[] key = new byte[0];
-
-        if (encryptFileNames) {
-            argon2 = Argon2Factory.createAdvanced(Argon2Factory.Argon2Types.ARGON2id);
-            iv = Arrays.copyOfRange(privateKey.getEncoded(), 0, 16);
-            salt = Arrays.copyOfRange(privateKey.getEncoded(), 16, 32);
-            key = argon2.pbkdf(3, 500000, 4, password.getBytes(), salt, 32);
-        }
+        LazySodiumJava sodium = CloudEncrypt.getSodium();
+        List<File> downloadedFiles = downloader.downloadFiles(backupFolder, -1);
+        SymmetricDecryptor decryptor = backupFolder.getSymmetricDecryptor();
+        ECCDecryptor eccDecryptor = new ECCDecryptor();
 
         for (File file : downloadedFiles) {
             long start = System.currentTimeMillis();
 
+            if (file.getName().equals("ce_priv.key") || file.getName().equals("ce_pub.key")
+                    || file.getName().endsWith(".ce") || file.getName().equals("oauth.json")
+                    || file.getName().endsWith(".cename")) continue;
+
             try {
                 System.out.println("Decrypting " + file.getName() + "...");
-                String fileContents = new String(Files.readAllBytes(file.toPath()));
-                String filePassword = fileContents.split(Pattern.quote("$CEPS$"))[1];
-                byte[] decryptedPassword = rsaDecryptor.decryptBytes(Base64.getDecoder().decode(filePassword), privateKey);
-                byte[] decryptedContents = aesDecryptor.decryptFileContents(file, decryptedPassword);
+                FileInputStream fis = new FileInputStream(file);
+                byte[] filePassword = new byte[Box.SEALBYTES + SecretStream.KEYBYTES];
+                fis.read(filePassword);
+                fis.close();
+                byte[] decryptedPassword = eccDecryptor.decryptBytes(filePassword, publicKey, privateKey);
+                File decryptedFile = decryptor.decryptFile(file, decryptedPassword, true);
+                String dstPath = file.getAbsolutePath()
+                        .replace(backupFolder.getFolder().getAbsolutePath(), "")
+                        .replace("\\", "/");
 
                 long end = System.currentTimeMillis() - start;
                 System.out.println("Decryption took " + end + "ms");
-                Files.write(file.toPath(), decryptedContents);
 
-                if (encryptFileNames) {
-                    byte[] decryptedFileNameBytes = aesDecryptor.decryptBytes(Hex.decodeHex(file.getName().replace(".cen", "")), key, iv);
-                    String decryptedFileName = new String(decryptedFileNameBytes);
+                if (encryptDirectoryNames) {
+                    String[] split = dstPath.split("/");
+                    for (int i = 1; i < split.length - 1; i++) {
+                        String directoryName = split[i];
+                        byte[] decryptedDirectoryNameBytes;
 
-                    if (decryptedFileName.length() >= 255) {
-                        System.out.println("Encrypted file name too long! Using original name...");
-                        decryptedFileName = file.getName();
+                        if (directoryName.contains("-")) {
+                            File nameFile = new File(file.getParentFile(), directoryName + ".cename");
+                            decryptedDirectoryNameBytes = eccDecryptor.decryptBytes(Base64.getDecoder().decode(Files.readAllBytes(nameFile.toPath())), publicKey, privateKey);
+                        } else {
+                            decryptedDirectoryNameBytes = eccDecryptor.decryptBytes(Base64.getDecoder().decode(directoryName.replace("_", "/")), publicKey, privateKey);
+                        }
+
+                        String decryptedDirectoryName = sodium.str(decryptedDirectoryNameBytes);
+                        split[i] = decryptedDirectoryName;
                     }
 
-                    Files.move(file.toPath(), new File(backupFolder.getFolder(), decryptedFileName).toPath());
+                    dstPath = String.join("/", split);
                 }
-            } catch (IOException | DecoderException e) {
-                e.printStackTrace();
+
+                if (encryptFileNames) {
+                    String encryptedFileName = file.getName().replace("_", "/");
+                    byte[] decryptedFileNameBytes;
+
+                    if (encryptedFileName.contains("-")) {
+                        File nameFile = new File(file.getParentFile(), file.getName() + ".cename");
+                        decryptedFileNameBytes = eccDecryptor.decryptBytes(Base64.getDecoder().decode(Files.readAllBytes(nameFile.toPath())), publicKey, privateKey);
+                    } else {
+                        decryptedFileNameBytes = eccDecryptor.decryptBytes(Base64.getDecoder().decode(encryptedFileName), publicKey, privateKey);
+                    }
+
+                    String decryptedFileName = sodium.str(decryptedFileNameBytes);
+                    String[] split = dstPath.split("/");
+                    dstPath = dstPath.replace(split[split.length - 1], decryptedFileName);
+                }
+
+                File dstFile = new File(backupFolder.getFolder(), dstPath);
+                if (!dstFile.getParentFile().exists()) {
+                    dstFile.getParentFile().mkdirs();
+                }
+
+                file.delete();
+                Files.move(decryptedFile.toPath(), dstFile.toPath());
+            } catch (Exception ex) {
+                ex.printStackTrace();
             }
+        }
+
+        for (File file : downloadedFiles) {
+            if (file.getParentFile().exists()) {
+                deleteEmptyDirectories(file.getParentFile());
+            }
+        }
+    }
+
+    private void deleteEmptyDirectories(File file) {
+        File[] files = file.listFiles();
+
+        if (files != null) {
+            for (File dirFile : files) {
+                if (dirFile.isDirectory()) {
+                    deleteEmptyDirectories(dirFile);
+                    files = file.listFiles();
+                } else if (dirFile.getName().endsWith(".cename")) {
+                    dirFile.delete();
+                }
+            }
+        }
+
+        if (files.length == 0) {
+            file.delete();
         }
     }
 }
