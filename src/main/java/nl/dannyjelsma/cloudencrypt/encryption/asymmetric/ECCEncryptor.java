@@ -3,8 +3,9 @@ package nl.dannyjelsma.cloudencrypt.encryption.asymmetric;
 import com.goterl.lazysodium.interfaces.Box;
 import nl.dannyjelsma.cloudencrypt.CloudEncrypt;
 
-public class ECCEncryptor {
+public class ECCEncryptor extends ASymmetricDecryptor {
 
+    @Override
     public byte[] encryptBytes(byte[] input, byte[] publicKey) {
         Box.Native cryptoBox = CloudEncrypt.getSodium();
         byte[] output = new byte[Box.SEALBYTES + input.length];

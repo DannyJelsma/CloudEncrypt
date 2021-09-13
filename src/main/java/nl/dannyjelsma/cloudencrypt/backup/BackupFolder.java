@@ -19,14 +19,18 @@ public class BackupFolder {
     private final String password;
     private final OAuthTokenManager tokenManager;
     private final EncryptionAlgorithm algorithm;
+    private final boolean encryptFileNames;
+    private final boolean encryptDirectoryNames;
 
-    public BackupFolder(File folder, String password, EncryptionAlgorithm algorithm) {
+    public BackupFolder(File folder, String password, EncryptionAlgorithm algorithm, boolean encryptFileNames, boolean encryptDirectoryNames) {
         this.folder = folder;
         this.privateKey = new File(folder, "ce_priv.key");
         this.publicKey = new File(folder, "ce_pub.key");
         this.password = password;
         this.tokenManager = new OAuthTokenManager(this);
         this.algorithm = algorithm;
+        this.encryptFileNames = encryptFileNames;
+        this.encryptDirectoryNames = encryptDirectoryNames;
     }
 
     public String getPassword() {
@@ -65,5 +69,17 @@ public class BackupFolder {
             case AES_GCM -> new AESEncryptor();
             case XCHACHA20_POLY1305 -> new ChaChaEncryptor();
         };
+    }
+
+    public EncryptionAlgorithm getAlgorithm() {
+        return algorithm;
+    }
+
+    public boolean isEncryptFileNamesEnabled() {
+        return encryptFileNames;
+    }
+
+    public boolean isEncryptDirectoryNamesEnabled() {
+        return encryptDirectoryNames;
     }
 }

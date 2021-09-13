@@ -1,16 +1,12 @@
 package nl.dannyjelsma.cloudencrypt.decryption.symmetric;
 
-import com.goterl.lazysodium.LazySodiumJava;
 import com.goterl.lazysodium.interfaces.AEAD;
 import com.goterl.lazysodium.interfaces.Box;
-import com.goterl.lazysodium.interfaces.SecretStream;
 import nl.dannyjelsma.cloudencrypt.CloudEncrypt;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
 import java.util.Arrays;
-import java.util.regex.Pattern;
 
 public class AESDecryptor extends SymmetricDecryptor {
 

@@ -2,10 +2,8 @@ package nl.dannyjelsma.cloudencrypt.upload;
 
 import com.dropbox.core.*;
 import com.dropbox.core.oauth.DbxCredential;
-import com.dropbox.core.oauth.DbxRefreshResult;
 import com.dropbox.core.v2.DbxClientV2;
 import com.dropbox.core.v2.files.*;
-import com.goterl.lazysodium.interfaces.AEAD;
 import nl.dannyjelsma.cloudencrypt.backup.BackupFolder;
 import nl.dannyjelsma.cloudencrypt.oauth.OAuthToken;
 import nl.dannyjelsma.cloudencrypt.oauth.OAuthTokenManager;
@@ -17,8 +15,8 @@ import java.util.Scanner;
 
 public class DropboxUploader implements Uploader {
 
-    private DbxClientV2 client;
     private static final int CHUNK_SIZE = 52428800;
+    private DbxClientV2 client;
     private long backupTime;
     private boolean isFirstFile;
 

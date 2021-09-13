@@ -3,7 +3,6 @@ package nl.dannyjelsma.cloudencrypt.download;
 import com.dropbox.core.*;
 import com.dropbox.core.oauth.DbxCredential;
 import com.dropbox.core.v2.DbxClientV2;
-import com.dropbox.core.v2.files.DownloadErrorException;
 import com.dropbox.core.v2.files.FileMetadata;
 import com.dropbox.core.v2.files.ListFolderResult;
 import com.dropbox.core.v2.files.Metadata;
@@ -19,8 +18,8 @@ import java.util.Scanner;
 
 public class DropboxDownloader implements Downloader {
 
-    private DbxClientV2 client;
     private static final int CHUNK_SIZE = 52428800;
+    private DbxClientV2 client;
 
     @Override
     public String getName() {

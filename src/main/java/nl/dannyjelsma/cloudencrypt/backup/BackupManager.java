@@ -5,14 +5,9 @@ import com.goterl.lazysodium.interfaces.Box;
 import com.goterl.lazysodium.interfaces.SecretStream;
 import nl.dannyjelsma.cloudencrypt.CloudEncrypt;
 import nl.dannyjelsma.cloudencrypt.decryption.asymmetric.ECCDecryptor;
-import nl.dannyjelsma.cloudencrypt.decryption.symmetric.AESDecryptor;
-import nl.dannyjelsma.cloudencrypt.decryption.symmetric.ChaChaDecryptor;
 import nl.dannyjelsma.cloudencrypt.decryption.symmetric.SymmetricDecryptor;
 import nl.dannyjelsma.cloudencrypt.download.Downloader;
-import nl.dannyjelsma.cloudencrypt.encryption.EncryptionAlgorithm;
 import nl.dannyjelsma.cloudencrypt.encryption.asymmetric.ECCEncryptor;
-import nl.dannyjelsma.cloudencrypt.encryption.symmetric.AESEncryptor;
-import nl.dannyjelsma.cloudencrypt.encryption.symmetric.ChaChaEncryptor;
 import nl.dannyjelsma.cloudencrypt.encryption.symmetric.SymmetricEncryptor;
 import nl.dannyjelsma.cloudencrypt.exceptions.BackupNotInitializedException;
 import nl.dannyjelsma.cloudencrypt.upload.Uploader;
@@ -31,14 +26,9 @@ public class BackupManager {
     private final BackupFolder backupFolder;
     private byte[] publicKey;
     private byte[] privateKey;
-    private final boolean encryptFileNames;
-    private final boolean encryptDirectoryNames;
 
-    // TODO: encryptFileNames and encryptDirectoryNames to BackupFolder?
-    public BackupManager(BackupFolder folder, boolean encryptFileNames, boolean encryptDirectoryNames) {
+    public BackupManager(BackupFolder folder) {
         this.backupFolder = folder;
-        this.encryptFileNames = encryptFileNames;
-        this.encryptDirectoryNames = encryptDirectoryNames;
 
         if (backupFolder.requiresFirstTimeInit()) {
             if (!doFirstTimeInit()) {
@@ -141,7 +131,7 @@ public class BackupManager {
                         .replace(backupFolder.getFolder().getAbsolutePath(), "") + file.getName();
                 dstPath = dstPath.replace("\\", "/");
 
-                if (encryptDirectoryNames) {
+                if (backupFolder.isEncryptDirectoryNamesEnabled()) {
                     String[] split = dstPath.split("/");
                     List<File> nameFiles = new ArrayList<>();
 
@@ -175,7 +165,7 @@ public class BackupManager {
                     }
                 }
 
-                if (encryptFileNames) {
+                if (backupFolder.isEncryptFileNamesEnabled()) {
                     byte[] encryptedFileNameBytes = eccEncryptor.encryptBytes(sodium.bytes(file.getName()), publicKey);
                     String encryptedFileName = Base64.getEncoder().encodeToString(encryptedFileNameBytes);
 
@@ -232,7 +222,7 @@ public class BackupManager {
                 long end = System.currentTimeMillis() - start;
                 System.out.println("Decryption took " + end + "ms");
 
-                if (encryptDirectoryNames) {
+                if (backupFolder.isEncryptDirectoryNamesEnabled()) {
                     String[] split = dstPath.split("/");
                     for (int i = 1; i < split.length - 1; i++) {
                         String directoryName = split[i];
@@ -252,7 +242,7 @@ public class BackupManager {
                     dstPath = String.join("/", split);
                 }
 
-                if (encryptFileNames) {
+                if (backupFolder.isEncryptFileNamesEnabled()) {
                     String encryptedFileName = file.getName().replace("_", "/");
                     byte[] decryptedFileNameBytes;
 

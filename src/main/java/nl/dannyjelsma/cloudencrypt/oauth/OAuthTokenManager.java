@@ -1,13 +1,10 @@
 package nl.dannyjelsma.cloudencrypt.oauth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import com.goterl.lazysodium.LazySodiumJava;
 import nl.dannyjelsma.cloudencrypt.CloudEncrypt;
 import nl.dannyjelsma.cloudencrypt.backup.BackupFolder;
-import nl.dannyjelsma.cloudencrypt.decryption.symmetric.ChaChaDecryptor;
 import nl.dannyjelsma.cloudencrypt.decryption.symmetric.SymmetricDecryptor;
-import nl.dannyjelsma.cloudencrypt.encryption.symmetric.ChaChaEncryptor;
 import nl.dannyjelsma.cloudencrypt.encryption.symmetric.SymmetricEncryptor;
 
 import java.io.File;
@@ -19,8 +16,8 @@ import java.util.List;
 public class OAuthTokenManager {
 
     private final BackupFolder folder;
-    private OAuthTokens tokens;
     private final File tokenFile;
+    private OAuthTokens tokens;
 
     public OAuthTokenManager(BackupFolder folder) {
         tokenFile = new File(folder.getFolder(), "oauth.json");

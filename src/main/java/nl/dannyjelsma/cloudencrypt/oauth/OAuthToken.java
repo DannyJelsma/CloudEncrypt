@@ -1,13 +1,12 @@
 package nl.dannyjelsma.cloudencrypt.oauth;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 public class OAuthToken {
 
     private String site;
     private String refreshToken;
 
-    public OAuthToken() {}
+    public OAuthToken() {
+    }
 
     public OAuthToken(String site, String refreshToken) {
         this.site = site;
