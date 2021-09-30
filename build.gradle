@@ -7,7 +7,7 @@ plugins {
 group 'nl.dannyjelsma'
 version '1.0-SNAPSHOT'
 
-sourceCompatibility = "11"
+sourceCompatibility = "16"
 
 application {
     mainClass = "nl.dannyjelsma.cloudencrypt.CloudEncrypt"
@@ -19,6 +19,7 @@ repositories {
 
 dependencies {
     implementation 'commons-io:commons-io:2.11.0'
+    implementation 'com.jfoenix:jfoenix:9.0.10'
     implementation 'com.dropbox.core:dropbox-core-sdk:4.0.1'
     implementation 'com.goterl:lazysodium-java:5.1.1'
     implementation 'net.java.dev.jna:jna:5.9.0'

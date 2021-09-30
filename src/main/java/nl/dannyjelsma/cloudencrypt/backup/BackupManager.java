@@ -19,6 +19,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.*;
 
 public class BackupManager {
@@ -26,9 +28,16 @@ public class BackupManager {
     private final BackupFolder backupFolder;
     private byte[] publicKey;
     private byte[] privateKey;
+    private SecureRandom random;
 
     public BackupManager(BackupFolder folder) {
         this.backupFolder = folder;
+
+        try {
+            this.random = SecureRandom.getInstanceStrong();
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
 
         if (backupFolder.requiresFirstTimeInit()) {
             if (!doFirstTimeInit()) {
@@ -50,7 +59,9 @@ public class BackupManager {
             SymmetricEncryptor encryptor = backupFolder.getSymmetricEncryptor();
             byte[] publicKey = new byte[Box.PUBLICKEYBYTES];
             byte[] privateKey = new byte[Box.SECRETKEYBYTES];
-            byte[] salt = sodium.randomBytesBuf(16);
+            byte[] salt = new byte[16];
+
+            random.nextBytes(salt);
             cryptoBox.cryptoBoxKeypair(publicKey, privateKey);
 
             byte[] encryptedPrivateKey = encryptor.encryptBytes(privateKey, sodium.bytes(backupFolder.getPassword()), salt);

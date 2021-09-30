@@ -6,6 +6,8 @@ import nl.dannyjelsma.cloudencrypt.CloudEncrypt;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.Arrays;
 
 public class AESEncryptor extends SymmetricEncryptor {
@@ -14,12 +16,20 @@ public class AESEncryptor extends SymmetricEncryptor {
 
     @Override
     public byte[] encryptBytes(byte[] input, byte[] key) {
-        LazySodiumJava sodium = CloudEncrypt.getSodium();
+        SecureRandom random;
+        try {
+            random = SecureRandom.getInstanceStrong();
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            return new byte[0];
+        }
+
         AEAD.Native aead = CloudEncrypt.getSodium();
         byte[] bufOut = new byte[AEAD.AES256GCM_ABYTES + input.length];
-        byte[] nonce = sodium.randomBytesBuf(AEAD.AES256GCM_NPUBBYTES);
+        byte[] nonce = new byte[AEAD.AES256GCM_NPUBBYTES];
         ByteArrayOutputStream bos = new ByteArrayOutputStream(nonce.length + bufOut.length);
 
+        random.nextBytes(nonce);
         bos.writeBytes(nonce);
         aead.cryptoAeadAES256GCMEncrypt(bufOut, new long[]{bufOut.length}, input, input.length, null, 0, null, nonce, key);
         bos.writeBytes(bufOut);
@@ -36,12 +46,14 @@ public class AESEncryptor extends SymmetricEncryptor {
 
     public File encryptFile(File file, byte[] key) {
         try {
-            LazySodiumJava sodium = CloudEncrypt.getSodium();
+            SecureRandom random = SecureRandom.getInstanceStrong();
             AEAD.Native aead = CloudEncrypt.getSodium();
             byte[] bufIn = new byte[CHUNK_SIZE];
             byte[] bufOut = new byte[AEAD.AES256GCM_ABYTES + CHUNK_SIZE];
-            byte[] nonce = sodium.randomBytesBuf(AEAD.AES256GCM_NPUBBYTES);
+            byte[] nonce = new byte[AEAD.AES256GCM_NPUBBYTES];
             File tempFile = new File(file.getParentFile(), file.getName() + ".ce");
+
+            random.nextBytes(nonce);
 
             if (!tempFile.exists()) {
                 tempFile.createNewFile();

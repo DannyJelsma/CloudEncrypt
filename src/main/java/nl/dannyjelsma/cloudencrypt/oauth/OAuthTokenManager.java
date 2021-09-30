@@ -11,6 +11,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.List;
 
 public class OAuthTokenManager {
@@ -18,10 +20,16 @@ public class OAuthTokenManager {
     private final BackupFolder folder;
     private final File tokenFile;
     private OAuthTokens tokens;
+    private SecureRandom random;
 
     public OAuthTokenManager(BackupFolder folder) {
         tokenFile = new File(folder.getFolder(), "oauth.json");
         this.folder = folder;
+        try {
+            this.random = SecureRandom.getInstanceStrong();
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
 
         if (!tokenFile.exists()) {
             try {
@@ -66,7 +74,7 @@ public class OAuthTokenManager {
         try {
             SymmetricEncryptor encryptor = folder.getSymmetricEncryptor();
             byte[] jsonBytes = objectMapper.writeValueAsBytes(tokens);
-            byte[] salt = sodium.randomBytesBuf(16);
+            byte[] salt = new byte[16];
             byte[] encryptedBytes = encryptor.encryptBytes(jsonBytes, sodium.bytes(this.folder.getPassword()), salt);
 
             System.out.println(sodium.str(jsonBytes));
