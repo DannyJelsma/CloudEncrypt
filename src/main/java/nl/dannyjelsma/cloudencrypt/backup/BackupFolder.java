@@ -27,10 +27,10 @@ public class BackupFolder {
         this.privateKey = new File(folder, "ce_priv.key");
         this.publicKey = new File(folder, "ce_pub.key");
         this.password = password;
-        this.tokenManager = new OAuthTokenManager(this);
         this.algorithm = algorithm;
         this.encryptFileNames = encryptFileNames;
         this.encryptDirectoryNames = encryptDirectoryNames;
+        this.tokenManager = new OAuthTokenManager(this);
     }
 
     public String getPassword() {

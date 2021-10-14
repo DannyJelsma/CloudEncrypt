@@ -19,7 +19,7 @@ public class LocalTestDownloader implements Downloader {
 
     @Override
     public List<File> downloadFiles(BackupFolder folder, long backupTime) {
-        File encryptedDir = new File("D:\\backup-enc");
+        File encryptedDir = new File("C:\\Users\\Danny\\Desktop\\test-bak");
         Collection<File> files = FileUtils.listFiles(encryptedDir, null, true);
         List<File> downloadedFiles = new ArrayList<>();
 

@@ -92,14 +92,16 @@ public class OAuthTokenManager {
         ObjectMapper objectMapper = new ObjectMapper();
         LazySodiumJava sodium = CloudEncrypt.getSodium();
 
-        try (FileInputStream fis = new FileInputStream(tokenFile)) {
-            SymmetricDecryptor decryptor = folder.getSymmetricDecryptor();
-            byte[] salt = fis.readNBytes(16);
-            byte[] encryptedBytes = fis.readAllBytes();
-            byte[] decrypted = decryptor.decryptBytes(encryptedBytes, sodium.bytes(this.folder.getPassword()), salt);
-            tokens = objectMapper.readValue(decrypted, OAuthTokens.class);
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (tokenFile.length() >= 16) {
+            try (FileInputStream fis = new FileInputStream(tokenFile)) {
+                SymmetricDecryptor decryptor = folder.getSymmetricDecryptor();
+                byte[] salt = fis.readNBytes(16);
+                byte[] encryptedBytes = fis.readAllBytes();
+                byte[] decrypted = decryptor.decryptBytes(encryptedBytes, sodium.bytes(this.folder.getPassword()), salt);
+                tokens = objectMapper.readValue(decrypted, OAuthTokens.class);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 

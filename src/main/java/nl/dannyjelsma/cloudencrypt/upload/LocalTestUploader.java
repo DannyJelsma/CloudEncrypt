@@ -14,7 +14,7 @@ public class LocalTestUploader implements Uploader {
 
     @Override
     public void uploadFile(BackupFolder folder, File originalFile, File encryptedFile, String fileName) {
-        String location = "D:\\backup-enc";
+        String location = "C:\\Users\\Danny\\Desktop\\test-bak";
         File file = new File(location, fileName);
 
         try {
